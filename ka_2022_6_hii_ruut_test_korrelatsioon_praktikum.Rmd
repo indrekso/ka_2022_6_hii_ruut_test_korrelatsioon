@@ -1,0 +1,42 @@
+---
+title: 'Hii-ruut-test ja korrelatsioon: praktikum'
+author: "Indrek Soidla"
+date: '2022-11-12'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Ülesanne 6.1
+
+Kas subjektiivne tervis ehk hinnang oma tervisele (tunnus `health`) on seotud kodakondsusega (tunnus `ctzcntr`)? Eelnevalt püstitage null- ja alternatiivhüpotees ning olulisuse nivool 0,01 langetage testitulemuse alusel hüpoteesipaari kohta otsus, kas kinnitada alternatiivhüpotees või jääda nullhüpoteesi juurde. Näidake lahenduses ära, milliste näitajate põhjal missugusele otsusele jõudsite, sealjuures esitage hii-ruut-testi tulemused tekstis korrektselt (vt viimaselt loenguslaidilt näidet hii-ruut-testi tulemuste esitamise kohta). Kui seos kahe tunnuse vahel esineb, siis milline see sisuliselt on, nt kas kodanikud on üldiselt parema tervisega (täpsemini: hindavad oma tervist paremaks) kui mittekodanikud? Kui tugevaks hindaksite seose Crameri *V* põhjal, kui tugevaks protsentjaotuste põhjal? Tooge välja konkreetsed näitajad (nt protsendid), mille põhjal taolisi järeldusi teete.
+
+Märkus: funktsioon `crosstab` annab hoiatuse indiviidide vähesuse kohta teoreetilise jaotuse lahtrites isegi juhul, kui alla 20% lahtrite sagedus on alla 5. Ju siis järgib see funktsioon  hii-ruut-testi eelduste täidetuse hindamisel mingit konservatiivsemat kriteeriumi, antud juhul ei pea end sellest segada laskma.
+
+```{r}
+ee8 <- ee8 %>% 
+  mutate(health2 = recode(as.factor(health),
+                          "1" = "Väga hea",
+                          "2" = "Hea",
+                          "3" = "Rahuldav",
+                          "4" = "Halb",
+                          "5" = "Väga halb"),
+         ctzcntr2 = recode(as.factor(ctzcntr),
+                           "1" = "Eesti kodanik",
+                           "2" = "Mittekodanik"))
+```
+
+```{r}
+crosstab(ee8$health2, ee8$ctzcntr2, weight = ee8$pspwght, expected = TRUE, prop.chisq = TRUE, chisq = TRUE)
+
+crosstab(ee8$health2, ee8$ctzcntr2, weight = ee8$pspwght, prop.c = TRUE)
+
+hrtest_health2_ctzcntr2 <- crosstab(ee8$health2, ee8$ctzcntr2, weight = ee8$pspwght, prop.c = TRUE)
+
+cramerV(hrtest_health2_ctzcntr2$tab)
+```
+
+
+

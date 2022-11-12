@@ -1,0 +1,443 @@
+---
+title: "Hii-ruut-test"
+author: "Indrek Soidla"
+date: '2022-11-11'
+output: 
+  html_document:
+    theme: spacelab
+    highlight: tango
+    toc: true
+    toc_float: 
+      collapsed: false
+    toc_depth: 3
+    fig_cap: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r message = FALSE}
+library(haven)
+library(tidyverse)
+library(summarytools)
+library(descr)
+library(rcompanion)
+library(Hmisc)
+library(corrplot)
+library(lattice)
+library(GGally)
+library(corrgram)
+library(weights)
+library(magrittr)
+```
+
+# Hii-ruut-test
+
+Teeme siin läbi õppevideotes esitatud näite, kus uuriti soo ja erakondliku eelistuse seost, et saada aimu, kuidas hii-ruut-statistikut arvutada ja seda paremini tõlgendada R-s. 
+
+## Tehniline ettevalmistus
+
+Loeme sisse ESS 8. küsitluslaine Eesti andmed.
+
+```{r}
+ee8 <- read_spss("data/ee8.sav")
+```
+
+Erakond, mille poolt vastaja hääletas 2015. aasta Riigikogu valimistel, on kirjas tunnuses `prtvtfee`. Vaatame tunnuse kategooriate nimetusi, kodeerime tunnuse ümber. Eri väikeparteide poolt hääletanud on eraldi kategooriates, paneme osad kategooriad kokku, et jaotus oleks ülevaatlikum ja vastaks hii-ruut-testi eeldustele. Kodeerime ümber ka soo tunnuse.
+
+```{r}
+attributes(ee8$prtvtfee)
+attributes(ee8$gndr)
+
+ee8 <- ee8 %>% 
+  mutate(prtvtfee2 = recode(as.factor(prtvtfee), 
+                            "1" = "RE",
+                            "2" = "KE",
+                            "3" = "IRL",
+                            "4" = "SDE",
+                            "6" = "EKRE",
+                            "5" = "VP", 
+                            "9" = "VP", 
+                            "10" = "VP", 
+                            "12" = "VP", 
+                            "13" = "VP",
+                            "11" = "VE"),
+         gndr2 = recode(as.factor(gndr),
+                        "1" = "Mees", 
+                        "2" = "Naine"))
+```
+
+## Risttabelite koostamine
+
+Varasemalt oleme kaalutud andmete põhjal risttabeli ehk tunnuste ühisjaotuse saanud funktsiooniga `ctable` paketist `summarytools`. Vastavad näited on järgnevalt ära toodud, aga kuna oleme seda varem kirjeldava statistika osas õppinud, seega pikemalt siin ei peatu; eri protsentjaotuste tõlgendus on toodud õppevideos.
+
+```{r}
+ctable(ee8$gndr2, ee8$prtvtfee2, weight = ee8$pspwght, useNA = "no", prop = "t", round.digits = 0)
+ctable(ee8$gndr2, ee8$prtvtfee2, weight = ee8$pspwght, useNA = "no", prop = "c", round.digits = 0)
+ctable(ee8$gndr2, ee8$prtvtfee2, weight = ee8$pspwght, useNA = "no", prop = "r", round.digits = 0)
+```
+
+## Hii-ruut-statistiku arvutamine
+
+Hii-ruut-statistiku saab arvutada ka funktsiooniga `ctable`, aga teeme seda paketi `descr` funktsiooni `crosstab` abil, sest see võimaldab tellida ka tunnuste teoreetilise ühisjaotuse (ja võimaldab samuti andmeid kaaluda).
+
+Arvutame hii-ruut-statistiku. Kuna saame automaatselt ka risttabeli, esitame selles informatiivsuse mõttes ka reaprotsendid. Automaatselt esitatakse väljundina ka risttabel mosaiikdiagrammi ehk Marimekko-diagrammi kujul - see ei ole küll väga täpne, sest puuduvad ühikud telgedel, seetõttu sobib see diagramm antud kujul ehk ainult omaette uurimiseks, mitte teistele esitamiseks.
+
+Kui risttabelis on esitatud reaprotsendid, siis diagramm on vaikeseadena koostatud veeruprotsentide alusel.
+
+```{r}
+crosstab(ee8$gndr2, ee8$prtvtfee2, weight = ee8$pspwght, prop.r = TRUE, chisq = TRUE)
+```
+
+Näeme, et hii-ruutstatistiku väärtus, vabadusastmete arv ja olulisuse tõenäosus on täpselt samad, mis õppevideotes. Olulisuse nivool 0,05 saame öelda, et erakondlik eelistus oli 2015. aasta Riigikogu valimistel seotud sooga. Teisiti sõnastades saame öelda, et erakondliku eelistuse jaotus oli Riigikogu valimas käinute seas meeste ja naiste hulgas erinev. Või teistpidi, sooline jaotus oli eri erakondade valijate seas erinev - kuna hii-ruut-test põhineb tunnuste absoluutsel ühisjaotusel ehk indiviidide arvudel lahtrites (mitte ühte- või teistpidi arvutatud protsentidel), siis kehtivad mõlemad tõlgendused. Milliste erakondade valijate sooline jaotus üksteisest erines, seda hii-ruut-test meile siiski ei ütle - näiteks ei saa me selle testi põhjal öelda, kas Reformierakonna ja Keskerakonna valijate sooline jaotus erines. Saaksime seda uurida, tehes risttabeli ja hii-ruut-testi ainult Reformierakonna ja Keskerakonna valijate andmete põhjal. Peame samas arvestama, et kuna indiviidide hulk kokku on sel juhul väiksem, ilmneb statistiliselt oluline seos alles jaotuste märkimisväärselt suurema erinevuse puhul. Ka tuleb silmas pidada, et kui teeksime selliseid kahe erakonna valijate võrdlusi suuremal hulgal, siis suureneb ka valepositiivse tulemuse võimalus (st kokku on vähemalt ühe testi puhul esimest liiki vea tegemise oht suurem kui iga üksiku testi puhul eraldi).
+
+## Hii-ruut-testi eelduste kontrollimine
+
+Et kontrollida hii-ruut-testi eelduste täidetust, oleks vaja näha ka teoreetilist ühisjaotust, st indiviidide hüpoteetilist jaotust risttabelis juhul, kui vaadeldavad tunnused üldse seotud ei oleks. Et tabel liiga kirjuks ei läheks, jätame eelnevast käsust reaprotsendid välja ja lisame argumendi `expected = TRUE`. 
+
+```{r}
+crosstab(ee8$gndr2, ee8$prtvtfee2, weight = ee8$pspwght, expected = TRUE, chisq = TRUE, plot = FALSE)
+```
+
+Nagu ka eelnevalt õppevideost nägime, ükski teoreetilise jaotuse sagedus ei ole väiksem viiest, seega hii-ruut-testi eeldused on täidetud. Kui oleksime teinud hii-ruut-testi algse erakondliku eelistuse tunnusega `prtvtfee`, oleks teoreetiline jaotus sisaldanud lahtreid, kus sagedus on alla ühe ja väiksema sagedusega kui viis lahtreid oleks 20%. Funktsioon `crosstab` annab ka ise vastava hoiatuse.
+
+```{r}
+crosstab(ee8$gndr2, ee8$prtvtfee, weight = ee8$pspwght, expected = TRUE, chisq = TRUE, plot = FALSE)
+```
+
+## Standardiseeritud ruutjäägid
+
+Lisaks teoreetilisele jaotusele saame funktsiooni `crosstab` puhul tellida standardiseeritud ruutjäägid, mis võimaldavad vahetumalt näha, millised lahtrid panustavad hii-ruut-statistikusse enam ehk millistes lahtrites on kõige suurem erinevus teoreetilisest jaotusest (hii-ruut-statistiku väärtus on ju standardiseeritud ruutjääkide summa).
+
+```{r}
+crosstab(ee8$gndr2, ee8$prtvtfee2, weight = ee8$pspwght, expected = TRUE, chisq = TRUE, prop.chisq = TRUE, plot = FALSE)
+```
+
+Antud juhul on näha, et suurim erinevus tegeliku ja teoreetilise jaotuse vahel (lähtudes standardiseeritud ruutjääkidest) on EKRE ja SDE valijate seas, st nende seas erineb mees- ja naisvastajate jaotus kõige rohkem meeste ja naiste jaotusest kõigi hääletanud vastajate seas. Sarnase järelduse oleksime saanud teha ka risttabeli veeruprotsentide põhjal, siin on see ehk veel selgemalt esile toodud.
+
+## Crameri *V* arvutamine
+
+Arvutame ka Crameri *V*. Võime seda ise teha või kasutada funktsiooni `cramerV` paketist `rcompanion`.
+
+Ise:
+
+```{r}
+sqrt(13.465 / (1178 * (2 - 1)))
+```
+
+Funktsioon `cramerV` tahab ainukese sisendina saada risttabelit, mille põhjal hii-ruut-statistik on arvutatud. Kui omistame hii-ruut-testi tulemused uuele objektile `hrtest`, siis vastav risttabel on alamobjektis `hrtest$tab` (käsuga `View(hrtest)` saate selles ise veenduda).
+
+Kui sisestate käsu `View(hrtest)`, siis näete, mida testitulemuste objekt sisaldab. Alamobjekti `CST` all on arvuline väärtus 13,465, mille nimeks on `statistics`. Seega on hii-ruut-statistiku väärtus kirjas objektis `hrtest$CST$statistic`. Samamoodi on 
+
+```{r}
+hrtest <- crosstab(ee8$prtvtfee2, ee8$gndr, weight = ee8$pspwght, chisq = TRUE, plot = FALSE)
+
+cramerV(hrtest$tab)
+```
+
+Crameri V väärtus on küllaltki madal, seega võib arvata, et seos kahe tunnuse vahel ei ole kuigi tugev. Tõsi, kui vaadata reaprotsentidega risttabelit, siis on näha, et erakondliku eelistuse jaotus meeste ja naiste seas erineb enamasti kahe kuni nelja protsendipunkti ulatuses; ka reaprotsendid ei erine ühegi erakonna puhul soolisest jaotusest kõigi vaadeldud vastajate seas rohkem kui 4%, ainult SDE ja EKRE valijate seas on erinevus märkimisväärselt suurem.
+
+## Ülesanne 1
+
+Kas haridustase on seotud hinnangutega väitele, et töökohtade nappuse korral peaks meestel olema eelisõigus tööd saada (st kas saab väita seose esinemist rahvastikus)? Kasuate ESS Eesti 8. laine andmeid. Sõnastage null- ja alternatiivhüpotees ning testige hüpoteesipaari olulisuse nivool 0,05. Enne hii-ruut-testi tegemist kontrollige testi eelduste täidetust. Kui seos esineb, püüdke seda ka sisuliselt iseloomustada (kuidas mingi haridustaseme esindajad oma suhtumise poolest üldiselt erinevad, kas seost võiks pidada pigem nõrgaks, mõõdukaks või tugevaks), näidake lahenduses ära, milliste näitajate põhjal missuguse tõlgenduseni jõuate.
+
+Tunnuste ümberkodeerimise käsud:
+
+```{r}
+ee8 <- ee8 %>% 
+  mutate(mnrgtjb2 = recode(as.factor(mnrgtjb),
+                           "1" = "Olen täiesti nõus",
+                           "2" = "Olen nõus",
+                           "3" = "Ei nõustu ega ole vastu",
+                           "4" = "Ei ole nõus",
+                           "5" = "Ei ole üldse nõus"),
+         haridus = case_when(edulvlb <= 213 ~ "Põhiharidus või madalam",
+                         edulvlb == 313 ~ "Keskharidus",
+                         edulvlb > 213 & edulvlb < 600 ~ "Kutseharidus",
+                         edulvlb >= 600 ~ "Kõrgharidus"))
+
+ee8$haridus <- fct_relevel(ee8$haridus, "Põhiharidus või madalam", "Kutseharidus", "Keskharidus", "Kõrgharidus")
+```
+
+Esitage ülesande lahendus kas:
+
+- Rmarkdowniga tehtud html-failina või 
+- nagu varasemalt skriptifailis, kuhu lisage ka lahenduseni jõudmiseks vajalikud eelnevad käsud (nt pakettide laadimine, andmete sisselugemine).
+
+Proovige ülesanne teha kõigepealt iseseisvalt eelneva koodi põhjal. Kui see ei õnnestu, siis…
+
+<details>
+  <summary>väljundi nägemiseks klikkige siia</summary>
+```{r echo = FALSE}
+crosstab(ee8$mnrgtjb2, ee8$haridus, weight = ee8$pspwght, expected = TRUE)
+crosstab(ee8$mnrgtjb2, ee8$haridus, weight = ee8$pspwght, prop.chisq = TRUE, prop.c = TRUE, chisq = TRUE)
+
+hrtest_mnrgtjb2_haridus <- crosstab(ee8$mnrgtjb2, ee8$haridus, weight = ee8$pspwght, prop.chisq = TRUE, prop.c = TRUE, chisq = TRUE)
+cramerV(hrtest_mnrgtjb2_haridus$tab)
+```
+</details>
+
+<details>
+  <summary>lahenduse nägemiseks klikkige siia</summary>
+```{r eval = FALSE}
+crosstab(ee8$mnrgtjb2, ee8$haridus, weight = ee8$pspwght, expected = TRUE)
+crosstab(ee8$mnrgtjb2, ee8$haridus, weight = ee8$pspwght, prop.chisq = TRUE, prop.c = TRUE, chisq = TRUE)
+
+hrtest_mnrgtjb2_haridus <- crosstab(ee8$mnrgtjb2, ee8$haridus, weight = ee8$pspwght, prop.chisq = TRUE, prop.c = TRUE, chisq = TRUE)
+cramerV(hrtest_mnrgtjb2_haridus$tab)
+```
+</details>
+
+
+# Korrelatsioonanalüüs
+
+ESS7 (2014) ankeedis on küsitud, kui oluliseks peaks pidama erinevaid tegureid, otsustades sisserändajate Eestisse lubamise üle (küsimused D1-D6, tunnused `qfimedu:qfimcmt`). Uurime nende tunnuste vahelisi korrelatsioone inimeste seas, kes ise on sündinud väljaspool Eestit. Eeldame esmalt ülesande lihtsustamiseks, et tunnuste vahel on lineaarne seos. Millised tunnused on üksteisega rohkem seotud, millised vähem? Milliseid järeldusi saab sellise analüüsi põhjal teha?
+
+Loeme sisse Eesti 7. laine andmed.
+
+```{r}
+ee7 <- read_spss("data/ee7.sav")
+```
+
+## Lineaarse korrelatsioonikordaja arvutamine
+
+Selekteerime vajalikud tunnused andmestikust `ee7` ja omistame nad uuele objektile `imp`. Kasutame korrelatsioonimaatriksi loomiseks funktsiooni `rcorr` paketist `Hmisc`, see funktsioon eeldab, et andmed on maatriksi kujul, seetõttu muudame objekti `imp` ka kohe maatriksiks. 
+
+ESS-i andmete analüüsimisel peaks üldjuhul kasutama ka kaale, aga teeme siinkohal lihtsuse huvides ja eelnevalt läbitehtu harjutamiseks ülesande esmalt läbi ilma kaaludeta.
+
+```{r}
+imp <- ee7 %>% 
+  filter(brncntr == 2) %>% 
+  select(qfimedu:qfimcmt) %>% 
+  as.matrix()
+
+rcorr(imp)
+```
+
+Saame väljundiks kolm maatriksit, millest esimeses on lineaarse korrelatsioonikordaja väärtused, teises indiviidide arvud ja kolmandas korrelatsioonikordajate olulisuse tõenäosused. Kuna indiviide on analüüsis palju (iga tunnuspaari puhul ligikaudu 2000), siis on ka korrelatsioonikordajate olulisuse tõenäosused ka mõõdukate seoste puhul väga madalad (kõik seosed on statistiliselt olulised olulisuse nivool 0,01, paljudel juhtudel ümardatult nullid, kuigi olulisuse tõenäosus ei saa kunagi olla täpselt null).
+
+Maatriksis olulise info leidmiseks isegi lihtsam on korrelatsioonimaatriksi visualiseerimine, kasutame selleks funktsiooni `corrplot` samanimelisest paketist. `corrplot` visualiseerib korrelatsioonikordajaid, seetõttu peame funktsiooni `rcorr` tulemuste objektist `imp_corr` andma `corrplot`'i esimeseks argumendiks kolmest maatriksikst ainult esimese. Argumendiga `method = "number"` seadistame diagrammile korrelatsioonikordajad arvudena (võite funktsiooni `corrplot` abifailist uurida ja katsetada, milliseid teisi võimalusi see argument pakub).
+
+```{r}
+imp_corr <- rcorr(imp)
+corrplot(imp_corr[[1]], method = "number")
+```
+
+Näeme, et tunnuste nimed pole joonisel just eriti informatiivsed, need  võiks asendada eestikeelsete nimedega. Corrplot võtab tunnuste nimed korrelatsioonimaatriksi ridade ja veergude nimedest, seega oleks vaja need ära muuta. Sümbolikombinatsiooniga `\n` saab tähistada reavahetust. Sobivad ridade/veergude nimetused on kõige parem sõnastada [eestikeelse ankeedi alusel](https://uhiskond.ut.ee/sites/default/files/2022-02/ess7_eesti_keelne_ankeet_13.08.pdf), vt küsimused D1-D6.
+
+```{r}
+nimed <- c("Hea haridus", "Eesti keele oskus", "Kristlik \ntaust", "Valge \nnahavärv", "Eestile vajalikud \ntööoskused", "Eesti elulaadi \nomaksvõtt")
+colnames(imp_corr[[1]]) <- nimed
+rownames(imp_corr[[1]]) <- nimed
+
+corrplot(imp_corr[[1]], method = "number")
+```
+
+Näeme, et teineteisega on kõige tugevamalt seotud Eestile vajalike tööoskuste olulisus ja hea hariduse olulisus, kristliku tausta olulisus ja valge nahavärvi olulisus, ning Eestile vajalike tööoskuste olulisus ja Eesti elulaadi omaksvõtmise olulisus. Võib öelda, et need seosed on tugevad või mõõdukalt tugevad. Sisuliste järelduste osas saab nt öelda, et mida olulisem on vastajale sisserände lubamise üle otsustamisel kristlik taust, seda olulisem on reeglina ka valge nahavärvi olulisus. Võimalik, et mõlemale küsimusele vastamist on mõjutanud positiivsem suhtumine lähedasest kultuuriruumist või isegi geograafiliselt lähemast piirkonnast pärit immigrantide suhtes. 
+
+## Lineaarse korrelatsioonikordaja arvutamise eeldused
+
+Ülesande lihtsustamiseks eeldasime, et tunnuste vahel esineb lineaarne seos. Kui me poleks seda eeldanud, vaid tahtnuksime seda ise järele kontrollida (mis oleks mõttekas), oleks seda saanud visuaalse vaatluse põhjal teha nt funktsiooniga `splom` paketist `lattice`, funktsiooniga `ggpairs` paketist `GGally` või funktsiooniga `corrgram` paketist `corrgram`. NB! Sirgjooni joonistel ei tohiks käsitleda kui tõendeid lineaarse seose olemasolust, jälgida tuleks, kuivõrd langeb sirgjoon kokku seosega, mida näeme punktiparvest joonisel.
+
+```{r warning = FALSE}
+splom(imp, alpha = 0.02)
+
+ggpairs(as.data.frame(imp), lower = list(continuous = wrap("smooth", alpha = 0.01))) 
+
+corrgram(imp, lower.panel = panel.ellipse, upper.panel = panel.shade, text.panel = panel.txt, diag.panel = panel.minmax, main = "Erinevate sisserände kriteeriumide olulisus: korrelatsioonimaatriks")
+```
+
+Viimane variant annab ka trendijooned, mis põhinevad LOESS-sobitusel, mis on paindlikum kui regressioonil põhinev sirgjoon, aga vahel isegi liiga, et mingeid järeldusi teha. Vahel võivad need jooned olla päris sinka-vonka, nii et tõlgendamine on keeruline ja pigem võiks neid võtta reservatsioonidega. Antud juhul väga palju need jooned lineaarsest seosest ei erine, nii et ei ole tõenäoliselt häda, kui kasutada Pearsoni korrelatsioonikordajaid (nagu me ka tegime).
+
+Ühe tunnuspaari puhul võib kasutada ka lihtsalt `ggplot`'i:
+
+```{r warning = FALSE}
+ggplot(as.data.frame(imp), aes(qfimedu, qfimlng)) +
+  geom_count() +
+  stat_smooth(method = "lm", formula = y ~ x)
+```
+
+## Spearmani korrelatsioonikordaja arvutamine
+
+Kui oleksime hajuvusdiagrammidelt siiski tuvastanud, et lineaarseid seoseid ei saa eeldada, oleksime saanud kasutada Spearmani korrelatsioonikordajat (eeldusel, et seoseid saab kirjeldada monotoonsetena):
+
+```{r}
+rcorr(imp, type = "spearman")
+```
+
+## Lineaarse korrelatsioonikordaja arvutamine kaaludega
+
+Kuidas võtta arvesse kaale? R-s on erinevates pakettides erinevaid funktsioone, mille funktsionaalsus on hea Pearsoni korrelatsioonikordaja osas, Spearmani osas on keerulisem. Näiteks paketis `weights` on funktsioon `wtd.cor`, mis arvutab ainult Pearsoni korrelatsioonikordajad.
+
+Kaasame oma andmestikku ka järelstratifitseerimise kaalu tunnuse ja arvutame kaalutud andmete põhjal korrelatsioonimaatriksi. Väljundis esitatakse iga korrelatsioonikordaja kohta ka standardviga ja *t*-väärtus, seose esinemise kohta otsuse tegemiseks piisab siiski vaid korrelatsioonikordajast ja olulisuse tõenäosusest.
+
+```{r warning = FALSE}
+imp2 <- ee7 %>% 
+  filter(brncntr == 2) %>% 
+  select(qfimedu:qfimcmt, pspwght)
+
+imp2 %>% 
+  select(qfimedu:qfimcmt) %>% 
+  wtd.cor(weight = imp2$pspwght)
+```
+
+Kui soovime maatriksites olevaid arve ümardada ja lahti saada arvude standardkujul esitamisest, ei saa funktsiooni `round` rakendada kõigile maatriksitele korraga, vaid ainult ühele. Selleks eraldame testitulemustest vajaliku maatriksi ja ümardame selles olevad arvud kahe komakohani (olulisuse tõenäosuste puhul võib kolme komakohani):
+
+```{r warning = FALSE}
+imp2 %>% 
+  select(qfimedu:qfimcmt) %>% 
+  wtd.cor(weight = imp2$pspwght) %>% 
+  extract2(1) %>% 
+  round(2)
+
+imp2 %>% 
+  select(qfimedu:qfimcmt) %>% 
+  wtd.cor(weight = imp2$pspwght) %>% 
+  extract2(4) %>% 
+  round(3)
+```
+
+Esitame tulemused ka visuaalselt ja lisame info statistilise olulisuse kohta. Et viimases oleks tunnuspaaride puhul mingeidki erinevusi ja oleks näha erinevus statistiliselt oluliste ja mitteoluliste tulemuste esitamisel, kasutame siin olulisuse nivood 0,001.
+
+Kui soovime joonisele ka infot statistilise olulisuse kohta, siis tuleb olulisuse tõenäosuse maatriksile lisada samad ridade/veergude nimed, mis korrelatsioonikordajate maatriksil.
+
+```{r warning = FALSE}
+r_wtd <- imp2 %>% 
+  select(qfimedu:qfimcmt) %>% 
+  wtd.cor(weight = imp2$pspwght) %>% 
+  extract2(1)
+
+rownames(r_wtd) <- nimed
+colnames(r_wtd) <- nimed
+
+p_wtd <- imp2 %>% 
+  select(qfimedu:qfimcmt) %>% 
+  wtd.cor(weight = imp2$pspwght) %>% 
+  extract2(4)
+
+colnames(p_wtd) <- nimed
+rownames(p_wtd) <- nimed
+
+corrplot(r_wtd, method = "number", p.mat = p_wtd, sig.level = 0.001, insig = 'pch', pch.col = 'grey')
+```
+
+Näeme, et erinevused kaalumata korrelatsioonikordajatega on siin minimaalsed.
+
+# Spearmani korrelatsioonikordaja arvutamine kaaludega
+
+Pakett `weights` ei anna võimalust arvutada Spearmani korrelatsionikordajat. Erinevates pakettides on selleks võimalusi, aga mõni ei võimalda arvutada korrelatsioonimaatriksit, mõni olulisuse tõenäosusi. Hädast aitab välja asjaolu, et Spearmani korrelatsioonikordaja saame ka siis, kui arvutame tunnuste astakud ja rakendame neile Pearsoni korrelatsioonikordaja arvutamise valemit. Seega olulisuse tõenäosuste saamiseks võiksime kaale arvesse võttes arvutada ise tunnuste väärtuste astakud ja anda funktsioonis `wtd.cor` esimeseks argumendiks astakud, siis saame väljundis Spearmani korrelatsioonikordajate väärtused ja olulisuse tõenäosused:
+
+```{r warning = FALSE}
+imp2a <- na.omit(imp2)
+
+imp2a$qfimedu_rank <- wtd.rank(imp2a$qfimedu, weights = imp2a$pspwght)
+imp2a$qfimlng_rank <- wtd.rank(imp2a$qfimlng, weights = imp2a$pspwght)
+imp2a$qfimchr_rank <- wtd.rank(imp2a$qfimchr, weights = imp2a$pspwght)
+imp2a$qfimwht_rank <- wtd.rank(imp2a$qfimwht, weights = imp2a$pspwght)
+imp2a$qfimwsk_rank <- wtd.rank(imp2a$qfimwsk, weights = imp2a$pspwght)
+imp2a$qfimcmt_rank <- wtd.rank(imp2a$qfimcmt, weights = imp2a$pspwght)
+
+imp2a %>% 
+  select(qfimedu_rank:qfimcmt_rank) %>% 
+  wtd.cor(weight = imp2a$pspwght)
+```
+
+Spearmani korrelatsioonikordajad ja nende olulisuse tõenäosused ümardatult.
+
+```{r warning = FALSE}
+imp2a %>% 
+  select(qfimedu_rank:qfimcmt_rank) %>% 
+  wtd.cor(weight = imp2a$pspwght) %>% 
+  extract2(1) %>% 
+  round(2)
+
+imp2a %>% 
+  select(qfimedu_rank:qfimcmt_rank) %>% 
+  wtd.cor(weight = imp2a$pspwght) %>% 
+  extract2(4) %>% 
+  round(3)
+```
+
+Kõik olulisuse tõenäosused on nagu eelnevategi tulemuste puhul väga madalad.
+
+## Ülesanne 2
+
+Kas / kuidas on omavahel seotud haridus ja usaldus erinevate institutsioonide vastu töötute seas? Hinnake seoste olemasolu lineaarse korrelatsioonikordaja alusel. Võtke aluseks ESS-i 9. laine kaalutud andmed:
+
+- haridustee pikkus: `eduyrs`
+- usaldus erinevate institutsioonide vastu: `trstprl:trstprt`
+- töötud: väärtus 1 tunnustes `uempla` ja `uempli`
+
+Andmete sisselaadimine:
+
+```{r}
+ee9 <- read_spss("data/ee9.sav")
+```
+
+
+Esitage ülesande lahendus kas:
+
+- Rmarkdowniga tehtud html-failina või 
+- nagu varasemalt skriptifailis, kuhu lisage ka lahenduseni jõudmiseks vajalikud eelnevad käsud (nt pakettide laadimine, andmete sisselugemine).
+
+Proovige ülesanne teha kõigepealt iseseisvalt eelneva koodi põhjal. Kui see ei õnnestu, siis…
+
+<details>
+  <summary>väljundi nägemiseks klikkige siia</summary>
+```{r echo = FALSE, warning = FALSE}
+unemployed <- ee9 %>% 
+  filter(uempla == 1 | uempli == 1)
+
+r_wtd_unempl <- unemployed %>% 
+  select(eduyrs, trstprl:trstprt) %>% 
+  wtd.cor(weight = unemployed$pspwght) %>% 
+  extract2(1) %>% 
+  round(2)
+
+p_wtd_unempl <- unemployed %>% 
+  select(eduyrs, trstprl:trstprt) %>% 
+  wtd.cor(weight = unemployed$pspwght) %>% 
+  extract2(4) %>% 
+  round(3)
+
+nimed_unempl <- c("Haridustee pikkus", "Usaldus Riigikogu vastu", "Usaldus õigussüsteemi vastu", "Usaldus politsei vastu", "Usaldus poliitikute vastu", "Usaldus erakondade vastu")
+
+colnames(r_wtd_unempl) <- nimed_unempl
+rownames(r_wtd_unempl) <- nimed_unempl
+colnames(p_wtd_unempl) <- nimed_unempl
+rownames(p_wtd_unempl) <- nimed_unempl
+
+corrplot(r_wtd_unempl, method = "number", p.mat = p_wtd_unempl, sig.level = 0.01, insig = 'pch', pch.col = 'grey')
+```
+</details>
+
+<details>
+  <summary>lahenduse nägemiseks klikkige siia</summary>
+```{r eval = FALSE, warning = FALSE}
+unemployed <- ee9 %>% 
+  filter(uempla == 1 | uempli == 1)
+
+r_wtd_unempl <- unemployed %>% 
+  select(eduyrs, trstprl:trstprt) %>% 
+  wtd.cor(weight = unemployed$pspwght) %>% 
+  extract2(1) %>% 
+  round(2)
+
+p_wtd_unempl <- unemployed %>% 
+  select(eduyrs, trstprl:trstprt) %>% 
+  wtd.cor(weight = unemployed$pspwght) %>% 
+  extract2(4) %>% 
+  round(3)
+
+nimed_unempl <- c("Haridustee pikkus", "Usaldus Riigikogu vastu", "Usaldus õigussüsteemi vastu", "Usaldus politsei vastu", "Usaldus poliitikute vastu", "Usaldus erakondade vastu")
+
+colnames(r_wtd_unempl) <- nimed_unempl
+rownames(r_wtd_unempl) <- nimed_unempl
+colnames(p_wtd_unempl) <- nimed_unempl
+rownames(p_wtd_unempl) <- nimed_unempl
+
+corrplot(r_wtd_unempl, method = "number", p.mat = p_wtd_unempl, sig.level = 0.01, insig = 'pch', pch.col = 'grey')
+```
+</details>
